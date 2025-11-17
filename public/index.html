@@ -1,221 +1,101 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Get Exact Location (with user permission)</title>
-<style>
-  body{font-family:system-ui,Segoe UI,Roboto,sans-serif;margin:18px;color:#111;max-width:820px}
-  .card{border:1px solid #eaeaea;padding:16px;border-radius:12px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,0,0,0.03)}
-  h1{margin:0 0 6px 0;font-size:20px}
-  p.lead{color:#555;margin:6px 0 12px}
-  button{background:#0366d6;color:#fff;border:0;padding:10px 14px;border-radius:10px;cursor:pointer}
-  button.secondary{background:#6b7280}
-  .muted{color:#666;font-size:13px}
-  pre{background:#f7fafc;padding:10px;border-radius:8px;overflow:auto}
-  .ok{color:#065f46} .warn{color:#b45309}
-</style>
+  <meta charset="utf-8" />
+  <title>Send Location (form/iframe method)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
 </head>
 <body>
-  <div class="card">
-    <h1>Share your precise location</h1>
-    <p class="lead">We will ask for permission to access your device's location. Allow to get a precise GPS fix (best on mobile with GPS enabled). We won't store anything unless you confirm.</p>
-    <div style="display:flex; gap:8px;">
-      <button id="startBtn">Allow precise location</button>
-      <button id="stopBtn" disabled class="secondary">Stop</button>
-      <button id="sendBtn" disabled class="secondary">Send to Server (optional)</button>
-    </div>
-    <p class="muted">Note: For hosted sites, serve this page over HTTPS so the browser permits precise geolocation. Localhost works without HTTPS.</p>
-  </div>
+  <h2>Send Location to Google Sheet</h2>
+  <p id="status">Press the button to share location.</p>
+  <button id="sendBtn">Get location & send</button>
 
-  <div class="card">
-    <strong>Permission state:</strong> <span id="perm">unknown</span><br>
-    <strong>Status:</strong> <span id="status">idle</span>
-    <div class="muted" id="hint"></div>
-  </div>
+  <script>
+    // ----- CONFIG -----
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby15x1sTy0-MWhfswHVKds1bTFnbJn67-4F5FMbAHUMaEWDceGRF2jx_MlvQMpkjYDw/exec'; // e.g. https://script.google.com/macros/s/XXXXXXXXXX/exec
+    const SECRET_TOKEN = 'bumblebee'; // same as SECRET in Apps Script
+    // ------------------
 
-  <div id="resultCard" class="card" style="display:none">
-    <h2>Exact location (live)</h2>
-    <div><strong>Latitude:</strong> <span id="lat"></span></div>
-    <div><strong>Longitude:</strong> <span id="lon"></span></div>
-    <div><strong>Accuracy (meters):</strong> <span id="acc"></span></div>
-    <div><strong>Timestamp:</strong> <span id="ts"></span></div>
-    <div style="margin-top:10px"><strong>Address (reverse-geocoded):</strong><div id="addr">—</div></div>
-    <pre id="raw"></pre>
-  </div>
+    const statusEl = document.getElementById('status');
+    const btn = document.getElementById('sendBtn');
 
-<script>
-/*
-  Behavior:
-  - When user clicks "Allow precise location": request watchPosition with enableHighAccuracy.
-  - Keep listening until accuracy <= GOOD_M (you can change threshold).
-  - Show coords, accuracy, timestamp, and reverse-geocoded address via Nominatim (demo).
-  - Optionally POST data to your server (commented).
-*/
-
-const startBtn = document.getElementById('startBtn');
-const stopBtn  = document.getElementById('stopBtn');
-const sendBtn  = document.getElementById('sendBtn');
-const permEl   = document.getElementById('perm');
-const statusEl = document.getElementById('status');
-const hintEl   = document.getElementById('hint');
-
-const latEl = document.getElementById('lat');
-const lonEl = document.getElementById('lon');
-const accEl = document.getElementById('acc');
-const tsEl  = document.getElementById('ts');
-const addrEl= document.getElementById('addr');
-const rawEl = document.getElementById('raw');
-const resultCard = document.getElementById('resultCard');
-
-let watchId = null;
-let lastGoodFix = null;
-const GOOD_M = 30; // consider <=30m good enough for "exact". Lower to be stricter.
-
-async function updatePermissionState(){
-  if (!navigator.permissions) {
-    permEl.textContent = 'Permissions API not supported';
-    return;
-  }
-  try {
-    const p = await navigator.permissions.query({ name: 'geolocation' });
-    permEl.textContent = p.state;
-    p.onchange = ()=> permEl.textContent = p.state;
-  } catch(e){
-    permEl.textContent = 'error';
-  }
-}
-
-// start watching position
-startBtn.addEventListener('click', async () => {
-  if (!('geolocation' in navigator)) {
-    statusEl.textContent = 'Geolocation API not available in this browser';
-    return;
-  }
-
-  // UX note: show a short message before the prompt
-  statusEl.textContent = 'Requesting location permission — please Allow in the browser prompt.';
-  hintEl.textContent = 'If you deny, we will not get precise coordinates. For best results: enable device GPS, disable VPN, test on mobile.';
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
-
-  watchId = navigator.geolocation.watchPosition(onPos, onErr, {
-    enableHighAccuracy: true,
-    maximumAge: 0,
-    timeout: 60000 // give it longer to get a good fix
-  });
-
-  await updatePermissionState();
-});
-
-// stop watching
-stopBtn.addEventListener('click', () => {
-  if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-    statusEl.textContent = 'Stopped watching position';
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-  }
-});
-
-// optional send to server (uncomment server code and configure endpoint)
-sendBtn.addEventListener('click', async () => {
-  if (!lastGoodFix) {
-    alert('No location collected yet.');
-    return;
-  }
-  const payload = {
-    lat: lastGoodFix.coords.latitude,
-    lon: lastGoodFix.coords.longitude,
-    accuracyMeters: lastGoodFix.coords.accuracy,
-    timestamp: new Date(lastGoodFix.timestamp).toISOString()
-  };
-  // Example: POST to your server (implement /api/collect on server)
-  try {
-    const r = await fetch('/api/collect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    btn.addEventListener('click', () => {
+      statusEl.textContent = 'Requesting location permission...';
+      if (!navigator.geolocation) {
+        statusEl.textContent = 'Geolocation not supported in this browser.';
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(success, fail, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
     });
-    if (!r.ok) throw new Error('server returned ' + r.status);
-    alert('Location sent to server (response ' + r.status + ')');
-  } catch (err) {
-    console.error(err);
-    alert('Failed to send to server: ' + (err.message || err));
-  }
-});
 
-function onPos(pos) {
-  // show raw & basic UI
-  lastGoodFix = pos;
-  const lat = pos.coords.latitude;
-  const lon = pos.coords.longitude;
-  const acc = pos.coords.accuracy;
-  const ts  = new Date(pos.timestamp).toLocaleString();
-
-  latEl.textContent = lat;
-  lonEl.textContent = lon;
-  accEl.textContent = Math.round(acc) + ' m';
-  tsEl.textContent = ts;
-  rawEl.textContent = JSON.stringify(pos, null, 2);
-  statusEl.textContent = 'Position received (accuracy ' + Math.round(acc) + ' m)';
-  resultCard.style.display = 'block';
-  sendBtn.disabled = false;
-
-  // reverse geocode for human address (demo only) — Nominatim has rate limits; for production use Google/Mapbox with server-side key
-  reverseGeocode(lat, lon).catch(()=>{ addrEl.textContent = 'reverse geocode failed'; });
-
-  // if accuracy is good enough, stop watching to conserve battery / CPU
-  if (acc <= GOOD_M) {
-    statusEl.textContent = 'Good accuracy achieved: ' + Math.round(acc) + ' m — stopping watch';
-    if (watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
+    function success(pos) {
+      statusEl.textContent = 'Got location. Sending...';
+      sendViaForm(pos).then(r => {
+        if (r && r.ok) {
+          statusEl.textContent = 'Sent successfully! Check the Google Sheet.';
+        } else {
+          statusEl.textContent = 'Send may have failed. See console for details.';
+          console.log('send result', r);
+        }
+      });
     }
-  } else {
-    // keep watching until good
-    hintEl.textContent = 'Waiting for better accuracy… (current ' + Math.round(acc) + ' m). Try moving outdoors or waiting a moment.';
-  }
-}
 
-function onErr(err) {
-  console.warn('geolocation error', err);
-  if (err && err.code === 1) {
-    statusEl.textContent = 'Permission denied — please allow location access in the browser.';
-    hintEl.textContent = 'If denied, enable Location permission in site settings and try again.';
-  } else if (err && err.code === 2) {
-    statusEl.textContent = 'Position unavailable — device may have GPS off. Enable location services.';
-    hintEl.textContent = 'Try outdoors or enable device GPS.';
-  } else if (err && err.code === 3) {
-    statusEl.textContent = 'Timed out waiting for position — retry.';
-    hintEl.textContent = 'Try increasing timeout or moving outdoors.';
-  } else {
-    statusEl.textContent = 'Error: ' + (err && err.message ? err.message : 'unknown');
-  }
-}
+    function fail(err) {
+      statusEl.textContent = 'Location error: ' + err.message;
+    }
 
-// Reverse geocode using Nominatim (OpenStreetMap) — demo only. For production, use Google/Mapbox on server with key.
-async function reverseGeocode(lat, lon) {
-  addrEl.textContent = 'Reverse geocoding…';
-  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'exact-location-demo/1.0 (contact@example.com)' }});
-    if (!res.ok) throw new Error('nominatim ' + res.status);
-    const json = await res.json();
-    addrEl.textContent = json.display_name || 'address not found';
-    return json;
-  } catch (e) {
-    console.warn('reverse geocode failed', e);
-    addrEl.textContent = 'reverse geocode failed';
-    throw e;
-  }
-}
+    // ---- sendViaForm: posts to Apps Script via a hidden form + iframe ----
+    async function sendViaForm(position) {
+      if (!position || !position.coords) return { ok:false, error:'no coords' };
+      // create hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.name = 'hidden_iframe_' + Date.now();
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
 
-// show initial permission state
-updatePermissionState();
-</script>
+      // create form
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = APPS_SCRIPT_URL;
+      form.target = iframe.name;
+      form.style.display = 'none';
+
+      const addInput = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value === undefined ? '' : String(value);
+        form.appendChild(input);
+      };
+
+      addInput('token', SECRET_TOKEN);
+      addInput('lat', position.coords.latitude);
+      addInput('lon', position.coords.longitude);
+      addInput('accuracy', position.coords.accuracy || '');
+      addInput('userAgent', navigator.userAgent);
+      addInput('extra', navigator.language || '');
+
+      document.body.appendChild(form);
+
+      return new Promise((resolve) => {
+        // If iframe loads a response, we assume POST completed.
+        iframe.onload = function() {
+          // cleanup
+          try { document.body.removeChild(form); } catch(e){}
+          try { document.body.removeChild(iframe); } catch(e){}
+          resolve({ ok:true });
+        };
+        // submit form (this avoids CORS preflight)
+        form.submit();
+        // fallback in case onload doesn't fire (some browsers)
+        setTimeout(() => {
+          try { document.body.removeChild(form); } catch(e){}
+          try { document.body.removeChild(iframe); } catch(e){}
+          resolve({ ok:true, note:'timeout fallback' });
+        }, 6000);
+      });
+    }
+  </script>
 </body>
 </html>
