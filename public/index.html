@@ -13,7 +13,7 @@
 
   <script>
     // ----- CONFIG -----
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby15x1sTy0-MWhfswHVKds1bTFnbJn67-4F5FMbAHUMaEWDceGRF2jx_MlvQMpkjYDw/exec'; // e.g. https://script.google.com/macros/s/XXXXXXXXXX/exec
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwV9b3Mt776QU1OfdjNWJMaYV3sxPGQOyL49Nu-0jt3Y1pcYHsz4iNER-P540RTgWJi/exec'; // e.g. https://script.google.com/macros/s/XXXXXXXXXX/exec
     const SECRET_TOKEN = 'bumblebee'; // same as SECRET in Apps Script
     // ------------------
 
@@ -44,10 +44,38 @@
     function fail(err) {
       statusEl.textContent = 'Location error: ' + err.message;
     }
+    // Reverse geocode helper (best-effort; may return null)
+    async function reverseGeocodeText(lat, lon) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'exact-location-demo/1.0 (contact@example.com)' }});
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.display_name || null;
+      } catch (e) {
+        return null;
+      }
+    }
 
-    // ---- sendViaForm: posts to Apps Script via a hidden form + iframe ----
+    // Updated sendViaForm with richer data & reverse geocode
     async function sendViaForm(position) {
       if (!position || !position.coords) return { ok:false, error:'no coords' };
+
+      // Prepare fields
+      const latRaw = position.coords.latitude;
+      const lonRaw = position.coords.longitude;
+      const lat = latRaw.toFixed(6); // human-readable precision
+      const lon = lonRaw.toFixed(6);
+      const accuracy = Math.round(position.coords.accuracy || 0);
+      const isoTs = new Date(position.timestamp).toISOString();
+      const rawJson = JSON.stringify(position);
+      const ua = navigator.userAgent;
+      const extra = navigator.language || '';
+
+      // Attempt reverse geocode (non-blocking failure)
+      let address = null;
+      try { address = await reverseGeocodeText(latRaw, lonRaw); } catch(e) { address = null; }
+
       // create hidden iframe
       const iframe = document.createElement('iframe');
       iframe.name = 'hidden_iframe_' + Date.now();
@@ -65,30 +93,31 @@
         const input = document.createElement('input');
         input.type = 'hidden';
         input.name = name;
-        input.value = value === undefined ? '' : String(value);
+        input.value = value === undefined || value === null ? '' : String(value);
         form.appendChild(input);
       };
 
       addInput('token', SECRET_TOKEN);
-      addInput('lat', position.coords.latitude);
-      addInput('lon', position.coords.longitude);
-      addInput('accuracy', position.coords.accuracy || '');
-      addInput('userAgent', navigator.userAgent);
-      addInput('extra', navigator.language || '');
+      addInput('lat', lat);
+      addInput('lon', lon);
+      addInput('lat_raw', latRaw);
+      addInput('lon_raw', lonRaw);
+      addInput('accuracy', accuracy);
+      addInput('timestamp_iso', isoTs);
+      addInput('address', address || '');
+      addInput('raw', rawJson);
+      addInput('userAgent', ua);
+      addInput('extra', extra);
 
       document.body.appendChild(form);
 
       return new Promise((resolve) => {
-        // If iframe loads a response, we assume POST completed.
         iframe.onload = function() {
-          // cleanup
           try { document.body.removeChild(form); } catch(e){}
           try { document.body.removeChild(iframe); } catch(e){}
           resolve({ ok:true });
         };
-        // submit form (this avoids CORS preflight)
         form.submit();
-        // fallback in case onload doesn't fire (some browsers)
         setTimeout(() => {
           try { document.body.removeChild(form); } catch(e){}
           try { document.body.removeChild(iframe); } catch(e){}
