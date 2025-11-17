@@ -19,3 +19,90 @@ https://script.google.com/u/0/home/projects/17DVwy9Tgj2E5eOV8K7SzA8WgXyoTDQdsxUK
 
 
 https://docs.google.com/spreadsheets/d/1TtinJWw4XccsvPMlsw4fwbMb7U4X6Snq_YS9jzHaVeA/edit?gid=2142078639#gid=2142078639
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ---------- Apps Script code: paste this into the editor ----------
+const SHEET_ID = '1TtinJWw4XccsvPMlsw4fwbMb7U4X6Snq_YS9jzHaVeA'; // <- replace this
+const SHEET_NAME = 'visitors'; // tab name (you can keep 'visitors')
+
+// put a long random secret here (copy it to your website later)
+const SECRET = 'bumblebee';
+
+// Apps Script: update your Code.gs doPost with this (keep SHEET_ID, SECRET as before)
+function doPost(e) {
+  try {
+    const params = e.parameter || {};
+    const token = params.token || '';
+
+    if (token !== SECRET) {
+      return ContentService.createTextOutput(JSON.stringify({ ok:false, error:'invalid token' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // read incoming fields (they are strings)
+    const lat = params.lat || params.lat_raw || '';
+    const lon = params.lon || params.lon_raw || '';
+    const accuracy = params.accuracy || '';
+    const timestamp_iso = params.timestamp_iso || '';
+    const address = params.address || '';
+    const raw = params.raw || '';
+    const ua = params.userAgent || '';
+    const extra = params.extra || '';
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName(SHEET_NAME);
+    if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+
+    // If sheet is empty (no header), create header row
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        'Timestamp_ISO',
+        'Latitude',
+        'Longitude',
+        'Accuracy_m',
+        'Address',
+        'UserAgent',
+        'Extra',
+        'RawJSON'
+      ]);
+    } else {
+      // check if first row looks like header (optional)
+      const firstRow = sheet.getRange(1,1,1,1).getValues()[0][0];
+      if (!firstRow || firstRow === '') {
+        sheet.insertRowBefore(1);
+        sheet.getRange(1,1,8).setValues([[
+          'Timestamp_ISO','Latitude','Longitude','Accuracy_m','Address','UserAgent','Extra','RawJSON'
+        ]]);
+      }
+    }
+
+    // Append the data row in same order as header
+    sheet.appendRow([
+      timestamp_iso || new Date().toISOString(),
+      lat,
+      lon,
+      accuracy,
+      address,
+      ua,
+      extra,
+      raw
+    ]);
+
+    return ContentService.createTextOutput(JSON.stringify({ ok:true })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok:false, error: ''+err })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
